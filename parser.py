@@ -56,7 +56,7 @@ def load_data(data_folder: str):
                 '_id': doc_id,
                 'subject': {
                     "type": "Antibody",
-                    "name": row['mab_name'],
+                    "name": row['mab_uid'],
                     'id': row['mab_id'],
                 },
                 'object': {
