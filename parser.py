@@ -54,9 +54,8 @@ def load_data(data_folder: str):
 
         doc_id = f"{row['mab_id']}-{virus_taxonid}"
 
-        # Pull pubmed id(s) for this row. Column name assumed to be
-        # 'pubmed_ids' -- change this to match your actual CSV header.
-        pubmed_ids = parse_pubmed_ids(row.get('pubmed_ids', ''))
+        # Pull pubmed id(s) for this row.
+        pubmed_ids = parse_pubmed_ids(row.get('pubmed_id', ''))
 
         if doc_id in docs:
             doc = docs[doc_id]
