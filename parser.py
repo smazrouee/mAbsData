@@ -1,6 +1,7 @@
 import csv
 import os
 import json
+import re
 
 
 # Convert CSV into a list of dictionaries
@@ -13,14 +14,22 @@ def read_csv(file: str, delim: str):
             if len(row) == 0:  # Skip empty rows
                 continue
             if i == 0:  # First row is the header
-                categories = [col.strip().lower() for col in row]  
+                categories = [col.strip().lower() for col in row]
             else:  # Process data rows
-                if len(row) != len(categories):  
+                if len(row) != len(categories):
                     print(f"Row length mismatch, skipping: {row}")
                     continue
                 info.append({categories[j]: row[j].strip() for j in range(len(row))})
     return info
 
+
+# Split a raw pubmed field into a clean list of individual IDs.
+# Handles missing values and multiple IDs separated by ; , | or whitespace.
+def parse_pubmed_ids(raw_value: str):
+    if not raw_value:
+        return []
+    parts = re.split(r"[;,|\s]+", raw_value.strip())
+    return [p for p in parts if p]
 
 
 # Load data and process JSON structure
@@ -38,21 +47,21 @@ def load_data(data_folder: str):
             continue
 
         try:
-            virus_taxonid = int(row['virus_taxonid'])  
+            virus_taxonid = int(row['virus_taxonid'])
         except ValueError:
             print(f"Invalid virus_taxonid value in row: {row}")
             continue
 
         doc_id = f"{row['mab_id']}-{virus_taxonid}"
 
-        # Append to existing doc or create new doc
+        # Pull pubmed id(s) for this row. Column name assumed to be
+        # 'pubmed_ids' -- change this to match your actual CSV header.
+        pubmed_ids = parse_pubmed_ids(row.get('pubmed_ids', ''))
+
         if doc_id in docs:
-            docs[doc_id]['relation'].append({
-                'virus_taxonid': virus_taxonid,
-                'virus_name': row['virus_name'],
-            })
+            doc = docs[doc_id]
         else:
-            docs[doc_id] = {
+            doc = {
                 '_id': doc_id,
                 'subject': {
                     "type": "Antibody",
@@ -64,12 +73,23 @@ def load_data(data_folder: str):
                     'id': virus_taxonid,
                     'name': row['virus_name'],
                 },
-                'relation': [{
-                    'virus_taxonid': virus_taxonid,
-                    'virus_name': row['virus_name'],
-                }],
+                'relation': [],
                 'predicate': 'targets'
             }
+            docs[doc_id] = doc
+
+        if pubmed_ids:
+            # Add each pubmed id once, skipping ones we've already recorded
+            existing_pmids = {r.get('pubmed') for r in doc['relation']}
+            for pmid in pubmed_ids:
+                if pmid not in existing_pmids:
+                    doc['relation'].append({'pubmed': pmid})
+                    existing_pmids.add(pmid)
+        elif not doc['relation']:
+            # No pubmed id available for this row, and we don't have any
+            # relation entry yet -- keep a placeholder so the relationship
+            # itself isn't lost, just without pubmed evidence.
+            doc['relation'].append({})
 
     for doc in docs.values():
         yield doc
@@ -77,7 +97,7 @@ def load_data(data_folder: str):
 
 def test():
     obj = {'data': []}
-    for doc in load_data("./"):  
+    for doc in load_data("./"):
         obj['data'].append(doc)
 
     with open("./output_mabs.json", "w") as f:
@@ -89,4 +109,3 @@ def test():
 # Main execution
 if __name__ == '__main__':
     test()
-
